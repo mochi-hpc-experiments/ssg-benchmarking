@@ -127,7 +127,7 @@ int main(int argc, char *argv[])
 
     observe_time = my_wtime();
     /* start observging the SSG server group */
-    sret = ssg_group_observe(mid, g_id);
+    sret = ssg_group_refresh(mid, g_id);
     observe_time = my_wtime() - observe_time;
 
     DIE_IF(sret != SSG_SUCCESS, "ssg_group_observe");
@@ -136,7 +136,6 @@ int main(int argc, char *argv[])
     if (rank == 0) ssg_group_dump(g_id);
 
     /* clean up */
-    ssg_group_unobserve(g_id);
     ssg_finalize();
     margo_finalize(mid);
 
