@@ -1,0 +1,92 @@
+#!/bin/bash 
+#BSUB -P csc332
+#BSUB -W 0:15
+#BSUB -nnodes 10
+#BSUB -step_cgroup n
+#BSUB -J ssg-simple
+
+
+set -euo pipefail
+
+cat<<EOM
+### DESCRIPTION ###
+
+Bigger scales!
+
+EOM
+
+# home is read-only on compute nodes (but not batch?) so be sure to put output
+# -- like this configuration file -- on  /gpfs/alpine
+
+WORKDIR=$(pwd)
+OUTPUTDIR=/gpfs/alpine/scratch/robl/csc332
+SSG_STATE=${OUTPUTDIR}/ssg-bench.out
+cd $OUTPUTDIR
+
+# LSB_DJOB_HOSTFILE is close except it includes 'batch' node and it is also one entry per cpu
+jsrun -r 1 hostname > hostfile
+
+# disable MR cache in libfabric; still problematic as of libfabric 1.10.1
+export FI_MR_CACHE_MAX_COUNT=0
+# use shared recv context in RXM; should improve scalability
+export FI_OFI_RXM_USE_SRX=1
+export FI_VERBS_DEVICE_NAME=mlx5_0
+
+# co-locate providers and clients, as we do in Benvolio
+SERVERS=10
+CLIENTS=10
+jsrun -r 1 hostname > hostfile
+cp hostfile clients
+cp hostfile servers
+#head -${SERVERS} hostfile > servers
+#tail -n +$(($SERVERS+1)) hostfile > clients
+
+# with recent mpich, can use jsrun (yay!)
+echo " launching group"
+#mpiexec -f hostfile -launcher ssh -ppn 1 -n $SERVERS  ./ssg-launch-group -s $((60*8)) -f ${SSG_STATE} -n scale-test verbs:// mpi &
+jsrun  -r 1 -n 1  -c ALL_CPUS -g ALL_GPUS ${WORKDIR}/ssg-launch-group -s $((60)) -f ${SSG_STATE} -n scale-test verbs:// mpi &
+#sleep 10
+#
+echo " observing group"
+#mpiexec -f hostfile -launcher ssh -ppn 32 -n $((CLIENTS*32)) ${WORKDIR}/ssg-observe-group verbs:// ${SSG_STATE}
+jsrun -r 1 -n 1 -a 10 -c ALL_CPUS -g 0 ${WORKDIR}/ssg-observe-group verbs:// ${SSG_STATE}
+
+
+#for providers in 1 10 20 40; do
+#    for clients in 1 10 20 40; do
+#for providers in 10; do
+#    for clients in 1;  do
+#         echo "====  providers: $providers clients: $clients"
+#         mpiexec -f hostfile -launcher ssh -ppn 1 -n $SERVERS  valgrind ${WORKDIR}/ssg-launch-group -s $((60*8)) -f ${SSG_STATE} -n scale-test verbs:// mpi &
+#         sleep 30;
+#         mpiexec -f hostfile -launcher ssh -ppn 32 -n $((CLIENTS*32)) valgrind ${WORKDIR}/ssg-observe-group verbs:// ${SSG_STATE}
+#         kill %1
+#    done
+#done
+#
+#echo " launching group"
+#jsrun -n 2 -r 1 -a 32 -g ALL_GPUS -c ALL_CPUS ./ssg-launch-group -s $((10*60)) -f ${SSG_STATE} -n scale-test verbs:// mpi >/dev/null &
+#sleep 60
+#jsrun -n 2 -r 1 -a 1 -g ALL_GPUS -c ALL_CPUS ./ssg-observe-group verbs:// ${SSG_STATE}
+#
+# experiment: how many ssg members can we launch?
+# in ten minutes we could iterate up to 64 providers per node. 
+#for i in 64 128 256 1024; do
+#        echo "=== $i providers"
+#	jsrun -n 2 -r 1 -a 64 -g ALL_GPUS -c ALL_CPUS ./ssg-launch-group -s $((10*60)) -f ${SSG_STATE} -n scale-test verbs:// mpi >/dev/null &
+#        sleep 5
+#        jsrun -n 1 -r 1 -a 1 -g ALL_GPUS -c ALL_CPUS ./ssg-observe-group verbs:// ${SSG_STATE}
+#done
+
+
+# would like a better way to know if group has launched
+#sleep 60
+
+#jsrun -n 2 -r 1 -a 128 -g ALL_GPUS -c ALL_CPUS  ./ssg-observe-group  verbs:// ${SSG_STATE}
+
+#echo " launching clients "
+#for i in 1 2 4 8 16 32 64 128 256 512; do
+#for i in 256 512 1024; do
+#	jsrun -n 2 -r 1 -a $i -g ALL_GPUS -c ALL_CPUS  ./ssg-observe-group  verbs:// ${SSG_STATE}
+#done
+#jsrun -n 2 -r 1 -a 128 -g ALL_GPUS -c ALL_CPUS  ./ssg-observe-group  verbs:// ${SSG_STATE}
