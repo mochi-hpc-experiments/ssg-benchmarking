@@ -139,6 +139,7 @@ int main(int argc, char *argv[])
     ssg_group_config_t g_conf = SSG_GROUP_CONFIG_INITIALIZER;
     int group_size;
     int ret, sret;
+    int self_ssg_rank = 0;
 
     /* set any default options (that may be overwritten by cmd args) */
     opts.shutdown_time = 10; /* default to running group for 10 seconds */
@@ -199,9 +200,8 @@ int main(int argc, char *argv[])
     if (opts.gid_file)
         ssg_group_id_store(opts.gid_file, g_id, SSG_ALL_MEMBERS);
 
-    /* sleep for given duration to allow group time to run */
-    if (opts.shutdown_time > 0)
-        margo_thread_sleep(mid, opts.shutdown_time * 1000.0);
+    /* sleep a bit for group to stabilize */
+    margo_thread_sleep(mid, 5 * 1000.0);
 
     /* get my group id and the size of the group */
     ret = ssg_get_self_id(mid, &my_id);
@@ -209,8 +209,16 @@ int main(int argc, char *argv[])
     ret = ssg_get_group_size(g_id, &group_size);
     DIE_IF(ret != 0, "ssg_get_group_size");
 
-    /* print group at each member */
-    ssg_group_dump(g_id);
+    /* have one process dump group information */
+    ret = ssg_get_group_self_rank(g_id, &self_ssg_rank);
+    DIE_IF(ret != 0, "ssg_get_group_self_rank");
+    if(self_ssg_rank == 0)
+        ssg_group_dump(g_id);
+
+    /* sleep for given duration to allow group time to run */
+    if (opts.shutdown_time > 0)
+        margo_thread_sleep(mid, opts.shutdown_time * 1000.0);
+
     ssg_group_destroy(g_id);
 
     /** cleanup **/
