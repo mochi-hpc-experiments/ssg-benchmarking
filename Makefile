@@ -1,5 +1,6 @@
 CC=mpicc
-CFLAGS=-Wall -g $(shell pkg-config --cflags ssg) $(shell pkg-config --libs ssg)
+CFLAGS=-Wall -g $(shell pkg-config --cflags ssg)
+LDLIBS=$(shell pkg-config --libs ssg)
 
 all: ssg-observe-group ssg-launch-group
 
